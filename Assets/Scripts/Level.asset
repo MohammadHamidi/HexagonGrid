@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b27c02ef7074a5bb07930c2a48692ed, type: 3}
+  m_Name: Level
+  m_EditorClassIdentifier: 
+  levelNumber: 1
+  levelName: Level 1
+  moveLimit: 15
+  colorPalette:
+  - {r: 0, g: 0, b: 1, a: 1}
+  - {r: 0, g: 1, b: 0, a: 1}
+  - {r: 1, g: 0, b: 0, a: 1}
+  hexagons:
+  - coordinates: {x: 0, y: 1}
+    direction: 3
+    colorIndex: 0
+  - coordinates: {x: 1, y: 0}
+    direction: 3
+    colorIndex: 0
+  - coordinates: {x: -1, y: 1}
+    direction: 3
+    colorIndex: 0
+  targetHexagonsToRemove: 3

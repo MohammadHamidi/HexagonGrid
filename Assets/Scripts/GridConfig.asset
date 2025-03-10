@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 224a0cdbabab84519963258b7cd927f7, type: 3}
+  m_Name: GridConfig
+  m_EditorClassIdentifier: 
+  hexHorizontalSpacing: 1.732
+  hexVerticalSpacing: 1
+  defaultGridWidth: 3
+  defaultGridHeight: 3
+  gridCellMaterial: {fileID: 2100000, guid: 12c720f1dd5674502bc1185ff99b70f9, type: 2}
+  showGridOutlines: 1
+  gridOutlineColor: {r: 1, g: 1, b: 1, a: 0.3}

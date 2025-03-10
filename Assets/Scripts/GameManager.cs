@@ -95,16 +95,16 @@ namespace HexaAway.Core
         {
             if (currentLevel == null || currentLevel.hexagons == null)
                 return;
-                
+        
             foreach (HexagonData hexData in currentLevel.hexagons)
             {
                 // Get the cell at these coordinates
                 HexCell cell = gridManager.GetCell(hexData.coordinates);
-                
+        
                 if (cell != null && !cell.IsOccupied)
                 {
-                    // Create a hexagon
-                    CreateHexagon(cell, hexData.direction, hexData.colorIndex);
+                    // Instead of creating a single hexagon, create a stack
+                    CreateHexagonStack(cell, hexData.direction, hexData.colorIndex);
                 }
                 else
                 {
@@ -112,6 +112,29 @@ namespace HexaAway.Core
                 }
             }
         }
+
+        private void CreateHexagonStack(HexCell cell, HexDirection direction, int colorIndex)
+        {
+            // Get color from palette
+            Color hexColor = Color.white;
+            if (currentLevel != null && colorIndex >= 0 && colorIndex < currentLevel.colorPalette.Length)
+            {
+                hexColor = currentLevel.colorPalette[colorIndex];
+            }
+    
+            // Create a parent GameObject for the stack at the cell's position (with a small Y offset)
+            GameObject stackObj = new GameObject($"HexagonStack_{cell.Coordinates.x}_{cell.Coordinates.y}");
+            stackObj.transform.position = cell.transform.position + new Vector3(0, 0.2f, 0);
+    
+            // Optionally add a collider for click detection (so the stack handles clicks instead of each hexagon)
+            BoxCollider collider = stackObj.AddComponent<BoxCollider>();
+            collider.size = new Vector3(1, 1, 1);
+    
+            // Add the HexagonStack script (see code below)
+            HexagonStack hexagonStack = stackObj.AddComponent<HexagonStack>();
+            hexagonStack.Initialize(hexagonPrefab, hexColor, direction, cell);
+        }
+
         
         private Hexagon CreateHexagon(HexCell cell, HexDirection direction, int colorIndex)
         {

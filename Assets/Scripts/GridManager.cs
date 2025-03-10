@@ -108,7 +108,7 @@ namespace HexaAway.Core
         {
             // Convert from axial coordinates to world position
             // Using formula for pointy-top hexagons
-            float x = gridConfig.hexHorizontalSpacing * (hexCoords.x + hexCoords.y/2f);
+            float x = gridConfig.hexHorizontalSpacing * (hexCoords.x + hexCoords.y / 2f);
             float z = gridConfig.hexVerticalSpacing * 1.5f * hexCoords.y;
             
             return new Vector3(x, 0, z);

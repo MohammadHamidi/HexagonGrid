@@ -19,14 +19,13 @@ MonoBehaviour:
   - {r: 0, g: 0, b: 1, a: 1}
   - {r: 0, g: 1, b: 0, a: 1}
   - {r: 1, g: 0, b: 0, a: 1}
+  - {r: 1, g: 0.8, b: 0.2, a: 1}
+  gridConfig: {fileID: 11400000, guid: 2dcfd1b2b0a3c482baa9c068730394d1, type: 2}
   hexagons:
-  - coordinates: {x: 0, y: 1}
-    direction: 1
-    colorIndex: 0
-  - coordinates: {x: 1, y: 0}
+  - coordinates: {x: 0, y: 0}
     direction: 2
-    colorIndex: 0
-  - coordinates: {x: -1, y: 1}
-    direction: 3
-    colorIndex: 0
+    colorIndex: 1
+  - coordinates: {x: 1, y: 1}
+    direction: 4
+    colorIndex: 2
   targetHexagonsToRemove: 3

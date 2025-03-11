@@ -18,7 +18,6 @@ namespace HexaAway.Core
         
         private void Awake()
         {
-            // Setup singleton
             if (Instance == null)
             {
                 Instance = this;
@@ -40,162 +39,118 @@ namespace HexaAway.Core
                 return;
             }
             
-            // Create a container for the grid cells
             gridContainer = new GameObject("Grid Container").transform;
             gridContainer.SetParent(transform);
             gridContainer.localPosition = Vector3.zero;
             
-            // Generate the grid
-            GenerateGrid(gridConfig.defaultGridWidth, gridConfig.defaultGridHeight);
+            GenerateGrid();
         }
         
-        public void GenerateGrid(int width, int height)
+        public void GenerateGrid()
         {
-            // Clear any existing grid
             ClearGrid();
             
-            // Calculate radius for hexagonal grid shape
-            int radius = Mathf.Max(width, height) / 2;
-            
-            // Create new grid cells using a hexagonal pattern
-            for (int q = -radius; q <= radius; q++)
+            if (gridConfig.gridRows == null || gridConfig.gridRows.Length == 0)
             {
-                int r1 = Mathf.Max(-radius, -q - radius);
-                int r2 = Mathf.Min(radius, -q + radius);
+                Debug.LogError("Grid layout is empty in GridConfig.");
+                return;
+            }
+            
+            for (int row = 0; row < gridConfig.gridRows.Length; row++)
+            {
+                GridRow gridRow = gridConfig.gridRows[row];
+                if (gridRow == null || gridRow.cells == null)
+                    continue;
                 
-                for (int r = r1; r <= r2; r++)
+                for (int col = 0; col < gridRow.cells.Length; col++)
                 {
-                    CreateCell(new Vector2Int(q, r));
+                    if (gridRow.cells[col])
+                    {
+                        CreateCell(new Vector2Int(col, row));
+                    }
                 }
             }
             
-            // Log the generated coordinates for debugging
             Debug.Log($"Generated grid with {cells.Count} cells");
-            string cellCoords = "Cell coordinates: ";
-            foreach (Vector2Int coord in cells.Keys)
-            {
-                cellCoords += $"({coord.x}, {coord.y}) ";
-            }
-            Debug.Log(cellCoords);
         }
         
         private void CreateCell(Vector2Int coords)
         {
-            // Skip if cell already exists
             if (cells.ContainsKey(coords))
                 return;
                 
-            // Create the cell object
             GameObject cellObject = Instantiate(hexCellPrefab, gridContainer);
             cellObject.name = $"HexCell_{coords.x}_{coords.y}";
             
-            // Set position
+            // Compute the world position based on grid coordinates.
             Vector3 worldPos = HexToWorld(coords);
             cellObject.transform.position = worldPos;
             
-            // Setup the cell component
             HexCell cell = cellObject.GetComponent<HexCell>();
             if (cell == null)
                 cell = cellObject.AddComponent<HexCell>();
                 
             cell.Initialize(coords);
-            
-            // Add to dictionary
             cells.Add(coords, cell);
         }
         
-        public Vector3 HexToWorld(Vector2Int hexCoords)
+        /// <summary>
+        /// Converts grid coordinates to world position.
+        /// Uses an offset grid conversion (pointy-top hex layout).
+        /// </summary>
+        public Vector3 GridToWorld(Vector2Int gridCoords)
         {
-            // Convert from axial coordinates to world position
-            // Using formula for pointy-top hexagons
-            float x = gridConfig.hexHorizontalSpacing * (hexCoords.x + hexCoords.y / 2f);
-            float z = gridConfig.hexVerticalSpacing * 1.5f * hexCoords.y;
-            
+            int col = gridCoords.x;
+            int row = gridCoords.y;
+            // For odd rows, shift the x position by half the horizontal spacing.
+            float x = col * gridConfig.hexHorizontalSpacing + (row % 2 == 1 ? gridConfig.hexHorizontalSpacing / 2f : 0);
+            float z = row * (gridConfig.hexVerticalSpacing * 0.75f);
             return new Vector3(x, 0, z);
         }
         
+        /// <summary>
+        /// Alias for GridToWorld to match Hexagon code expectations.
+        /// </summary>
+        public Vector3 HexToWorld(Vector2Int hexCoords)
+        {
+            return GridToWorld(hexCoords);
+        }
+        
+        /// <summary>
+        /// Converts a world position to grid coordinates.
+        /// This assumes the same offset grid conversion as HexToWorld.
+        /// </summary>
         public Vector2Int WorldToHex(Vector3 worldPos)
         {
-            // Convert world position to axial coordinates
-            // Using formula for pointy-top hexagons
-            float q = (worldPos.x / gridConfig.hexHorizontalSpacing) - (worldPos.z / (gridConfig.hexVerticalSpacing * 3f));
-            float r = worldPos.z / (gridConfig.hexVerticalSpacing * 1.5f);
-            
-            // Round to nearest hex
-            return HexRound(new Vector2(q, r));
+            float zSpacing = gridConfig.hexVerticalSpacing * 0.75f;
+            int row = Mathf.RoundToInt(worldPos.z / zSpacing);
+            float offset = (row % 2 == 1) ? gridConfig.hexHorizontalSpacing / 2f : 0;
+            int col = Mathf.RoundToInt((worldPos.x - offset) / gridConfig.hexHorizontalSpacing);
+            return new Vector2Int(col, row);
         }
         
-        private Vector2Int HexRound(Vector2 hex)
-        {
-            // Convert axial to cube coordinates
-            float x = hex.x;
-            float z = hex.y;
-            float y = -x - z;
-            
-            // Round cube coordinates
-            float rx = Mathf.Round(x);
-            float ry = Mathf.Round(y);
-            float rz = Mathf.Round(z);
-            
-            // Fix rounding errors
-            float xDiff = Mathf.Abs(rx - x);
-            float yDiff = Mathf.Abs(ry - y);
-            float zDiff = Mathf.Abs(rz - z);
-            
-            if (xDiff > yDiff && xDiff > zDiff)
-                rx = -ry - rz;
-            else if (yDiff > zDiff)
-                ry = -rx - rz;
-            else
-                rz = -rx - ry;
-            
-            // Convert back to axial
-            return new Vector2Int(Mathf.RoundToInt(rx), Mathf.RoundToInt(rz));
-        }
-        
+        /// <summary>
+        /// Retrieves the cell at the given coordinates.
+        /// </summary>
         public HexCell GetCell(Vector2Int coords)
         {
             if (cells.TryGetValue(coords, out HexCell cell))
                 return cell;
             
-            // Debugging - print a warning about missing cells
             Debug.LogWarning($"Cell not found at coordinates: ({coords.x}, {coords.y})");
-            
             return null;
         }
         
-        public List<HexCell> GetNeighbors(Vector2Int coords)
+        /// <summary>
+        /// Checks if a cell exists at the given coordinates.
+        /// </summary>
+        public bool HasCell(Vector2Int coords)
         {
-            List<HexCell> neighbors = new List<HexCell>();
-            
-            // The 6 neighboring directions in axial coordinates
-            Vector2Int[] directions = new Vector2Int[]
-            {
-                new Vector2Int(1, 0),   // East
-                new Vector2Int(1, -1),  // Southeast
-                new Vector2Int(0, -1),  // Southwest
-                new Vector2Int(-1, 0),  // West
-                new Vector2Int(-1, 1),  // Northwest
-                new Vector2Int(0, 1)    // Northeast
-            };
-            
-            foreach (Vector2Int dir in directions)
-            {
-                Vector2Int neighborCoord = coords + dir;
-                HexCell neighbor = GetCell(neighborCoord);
-                
-                if (neighbor != null)
-                {
-                    neighbors.Add(neighbor);
-                }
-            }
-            
-            return neighbors;
+            return cells.ContainsKey(coords);
         }
         
         private void ClearGrid()
         {
-            // Destroy all cell objects
             foreach (HexCell cell in cells.Values)
             {
                 if (cell != null && cell.gameObject != null)
@@ -203,18 +158,9 @@ namespace HexaAway.Core
                     Destroy(cell.gameObject);
                 }
             }
-            
-            // Clear the dictionary
             cells.Clear();
         }
         
-        // Helper method to check if a coordinate exists in the grid
-        public bool HasCell(Vector2Int coords)
-        {
-            return cells.ContainsKey(coords);
-        }
-        
-        // Get all cell coordinates
         public List<Vector2Int> GetAllCellCoordinates()
         {
             return new List<Vector2Int>(cells.Keys);

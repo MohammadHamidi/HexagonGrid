@@ -122,7 +122,7 @@ namespace HexaAway.Core
                 hexColor = currentLevel.colorPalette[colorIndex];
             }
     
-            // Create a parent GameObject for the stack at the cell's position (with a small Y offset)
+            Debug.Log($"");
             GameObject stackObj = new GameObject($"HexagonStack_{cell.Coordinates.x}_{cell.Coordinates.y}");
             stackObj.transform.position = cell.transform.position + new Vector3(0, 0.2f, 0);
     

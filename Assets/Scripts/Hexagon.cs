@@ -11,12 +11,16 @@ namespace HexaAway.Core
         [SerializeField] private MeshRenderer hexRenderer;
         [SerializeField] private Transform arrowTransform;
         [SerializeField] private float moveDuration = 0.5f;
-        [SerializeField] private float moveDistance = 2f;
+        [SerializeField] private float rollDuration = 0.3f;
+        [SerializeField] private float hexRadius = 0.5f; // Radius of the hexagon for pivot calculations
+        [SerializeField] private float rollbackDelay = 0.2f; // Delay before rolling back after collision
         
         private HexCell currentCell;
         private HexDirection direction;
         private Color hexColor;
         private bool isInteractable = true;
+        private bool isAnimating = false;
+        private bool isBeingRemoved = false; // Flag to track if this hexagon is being removed
         
         public HexCell CurrentCell => currentCell;
         public HexDirection Direction => direction;
@@ -42,7 +46,10 @@ namespace HexaAway.Core
             if (hexRenderer != null)
             {
                 Material mat = hexRenderer.material;
-                mat.color = hexColor;
+                if (mat != null)
+                {
+                    mat.color = hexColor;
+                }
             }
             
             // Set arrow direction
@@ -51,9 +58,6 @@ namespace HexaAway.Core
         
         /// <summary>
         /// Update the arrowTransform to match the HexDirection.
-        /// 
-        /// Note: Using (90, rotation, 0) so the arrow lies flat on top of the hex.
-        /// Adjust as needed if your model orientation differs.
         /// </summary>
         private void UpdateArrowDirection()
         {
@@ -94,7 +98,7 @@ namespace HexaAway.Core
         /// </summary>
         private void OnMouseDown()
         {
-            if (isInteractable)
+            if (isInteractable && !isAnimating && !isBeingRemoved)
             {
                 Unlock();
             }
@@ -105,167 +109,291 @@ namespace HexaAway.Core
         /// </summary>
         public void Unlock()
         {
+            if (isAnimating || isBeingRemoved) return;
+            
             // Start the unlocking process as a coroutine
             StartCoroutine(UnlockRoutine());
         }
 
         /// <summary>
-        /// Coroutine that handles rolling inside the grid, rolling off-grid, then falling.
+        /// Coroutine that handles rolling inside the grid, checking for collisions,
+        /// rolling off-grid if path is clear, or rolling back if blocked.
         /// </summary>
         private IEnumerator UnlockRoutine()
         {
+            isAnimating = true;
+            
             // Make non-interactable during animation
             SetInteractable(false);
 
-            // Clear from current cell
-            if (currentCell != null)
-            {
-                currentCell.ClearHexagon();
-            }
-
             // Get GridManager reference
-            GridManager gridManager = GameManager.Instance != null ? GameManager.Instance.gridManager : null;
-            if (gridManager == null)
+            if (GameManager.Instance == null || GameManager.Instance.gridManager == null)
             {
                 Debug.LogError("GridManager reference is null in Hexagon.UnlockRoutine()");
                 // Fallback simple animation if no grid
                 SimpleUnlockAnimation(HexDirectionHelper.GetMovementVector(direction));
+                isAnimating = false;
                 yield break;
             }
+            
+            GridManager gridManager = GameManager.Instance.gridManager;
 
-            // Determine current coordinates (in case cell reference was lost)
-            Vector2Int currentCoords = currentCell != null 
-                ? currentCell.Coordinates 
-                : gridManager.WorldToHex(transform.position);
-
-            // Build a path of inside-grid cells from currentCoords to the edge
-            List<Vector2Int> pathCoords = new List<Vector2Int>();
-            pathCoords.Add(currentCoords);
-
-            // Step along the direction while the next cell is inside the grid
-            Vector2Int tempCoords = currentCoords;
-            while (gridManager.HasCell(CalculateNextCellCoords(tempCoords, direction)))
+            // Handle the case where the current cell is null
+            if (currentCell == null)
             {
-                tempCoords = CalculateNextCellCoords(tempCoords, direction);
-                pathCoords.Add(tempCoords);
+                Debug.LogWarning("Current cell is null in Hexagon.UnlockRoutine(). Attempting to find cell from position.");
+                
+                // Try to find the cell based on our world position
+                Vector2Int coords = gridManager.WorldToHex(transform.position);
+                
+                // Get the cell at these coordinates
+                currentCell = gridManager.GetCell(coords);
+                
+                // If still null, we can't proceed with rolling
+                if (currentCell == null)
+                {
+                    Debug.LogError("Failed to find a valid cell for hexagon position. Using fallback animation.");
+                    SimpleUnlockAnimation(HexDirectionHelper.GetMovementVector(direction));
+                    isAnimating = false;
+                    yield break;
+                }
             }
-
-            // If pathCoords has more than 1 entry, we have inside-grid steps
-            if (pathCoords.Count > 1)
+            
+            Vector2Int currentCoords = currentCell.Coordinates;
+            
+            // Check if the next step is possible - if it's blocked or off grid
+            Vector2Int nextCoords = gridManager.GetNeighborCoordinate(currentCoords, direction);
+            
+            // Check if the next position is off the grid (we can roll off) 
+            if (!gridManager.HasCell(nextCoords))
             {
-                // Roll inside the grid cell-by-cell with pivot-based animation
-                yield return StartCoroutine(RollPathCoroutine(pathCoords, 0.3f, 120f));
+                // We can roll off the grid
+                isBeingRemoved = true;
+                
+                // Clear from current cell
+                currentCell.ClearHexagon();
+                
+                // Roll off the grid
+                Vector3 startPos = currentCell.transform.position;
+                Vector3 offGridPos = gridManager.HexToWorld(nextCoords);
+                
+                yield return RollBetweenPositions(startPos, offGridPos, rollDuration);
+                
+                // Fall off
+                FallOffGrid(nextCoords, direction, gridManager);
+                isAnimating = false;
+                yield break;
             }
-
-            // After rolling inside the grid, we do one final pivot roll off-grid
-            Vector2Int offGridCoords = CalculateNextCellCoords(pathCoords[pathCoords.Count - 1], direction);
-            Vector3 offGridPos = gridManager.HexToWorld(offGridCoords) + new Vector3(0, 0.2f, 0);
-
-            bool offRollDone = false;
-            PivotRollSingleStep(
-                transform.position,   // current position
-                offGridPos,           // just beyond the edge
-                120f,                 // roll angle
-                0.3f,                 // duration
-                () => offRollDone = true
+            
+            // Check if the next position is blocked (occupied by another hexagon)
+            if (IsPathBlocked(nextCoords, gridManager))
+            {
+                // Path is blocked, just do a bump animation
+                yield return BumpAnimation();
+                
+                // We're still in our original position, make interactable again
+                SetInteractable(true);
+                isAnimating = false;
+                yield break;
+            }
+            
+            // The path is clear for at least one step
+            
+            // Temporarily remove from the current cell
+            currentCell.ClearHexagon();
+            
+            // Roll to the next cell
+            Vector3 fromPos = currentCell.transform.position;
+            Vector3 toPos = gridManager.GetCell(nextCoords).transform.position;
+            
+            yield return RollBetweenPositions(fromPos, toPos, rollDuration);
+            
+            // Check if we can continue rolling
+            Vector2Int currentPathCoords = nextCoords;
+            bool pathClear = true;
+            bool reachedEdge = false;
+            
+            // Keep track of all cells we've visited to roll back if needed
+            List<Vector2Int> visitedCells = new List<Vector2Int> { currentCoords, currentPathCoords };
+            
+            while (pathClear && !reachedEdge)
+            {
+                // Get the next position in our direction
+                Vector2Int nextPathCoords = gridManager.GetNeighborCoordinate(currentPathCoords, direction);
+                
+                // Check if we're off the grid
+                if (!gridManager.HasCell(nextPathCoords))
+                {
+                    reachedEdge = true;
+                    isBeingRemoved = true;
+                    
+                    // Roll off the grid and fall
+                    Vector3 lastCellPos = gridManager.GetCell(currentPathCoords).transform.position;
+                    Vector3 offGridPos = gridManager.HexToWorld(nextPathCoords);
+                    
+                    yield return RollBetweenPositions(lastCellPos, offGridPos, rollDuration);
+                    
+                    // Animate falling off
+                    FallOffGrid(nextPathCoords, direction, gridManager);
+                    isAnimating = false;
+                    yield break;
+                }
+                
+                // Check if the next cell is blocked
+                if (IsPathBlocked(nextPathCoords, gridManager))
+                {
+                    pathClear = false;
+                    
+                    // Wait a moment before rolling back
+                    yield return new WaitForSeconds(rollbackDelay);
+                    
+                    // Roll back to original position by traversing our path in reverse
+                    for (int i = visitedCells.Count - 1; i > 0; i--)
+                    {
+                        Vector2Int fromCoords = visitedCells[i];
+                        Vector2Int toCoords = visitedCells[i-1];
+                        
+                        Vector3 fromRollbackPos = gridManager.GetCell(fromCoords).transform.position;
+                        Vector3 toRollbackPos = gridManager.GetCell(toCoords).transform.position;
+                        
+                        yield return RollBetweenPositions(fromRollbackPos, toRollbackPos, rollDuration);
+                    }
+                    
+                    // Put back in the original cell
+                    currentCell.PlaceHexagon(this);
+                    SetInteractable(true);
+                    isAnimating = false;
+                    yield break;
+                }
+                
+                // Path is clear, roll to next cell
+                Vector3 curPos = gridManager.GetCell(currentPathCoords).transform.position;
+                Vector3 nextPos = gridManager.GetCell(nextPathCoords).transform.position;
+                
+                yield return RollBetweenPositions(curPos, nextPos, rollDuration);
+                
+                // Update current position and add to our path
+                currentPathCoords = nextPathCoords;
+                visitedCells.Add(currentPathCoords);
+            }
+            
+            isAnimating = false;
+        }
+        
+        /// <summary>
+        /// Returns the opposite direction
+        /// </summary>
+        private HexDirection GetOppositeDirection(HexDirection dir)
+        {
+            switch (dir)
+            {
+                case HexDirection.East: return HexDirection.West;
+                case HexDirection.West: return HexDirection.East;
+                case HexDirection.NorthEast: return HexDirection.SouthWest;
+                case HexDirection.SouthWest: return HexDirection.NorthEast;
+                case HexDirection.NorthWest: return HexDirection.SouthEast;
+                case HexDirection.SouthEast: return HexDirection.NorthWest;
+                default: return dir;
+            }
+        }
+        
+        /// <summary>
+        /// Checks if the path at the given coordinates is blocked (cell is occupied)
+        /// </summary>
+        private bool IsPathBlocked(Vector2Int coords, GridManager gridManager)
+        {
+            HexCell cell = gridManager.GetCell(coords);
+            return cell != null && cell.IsOccupied;
+        }
+        
+        /// <summary>
+        /// Small animation for when the hexagon bumps into an obstacle
+        /// </summary>
+        private IEnumerator BumpAnimation()
+        {
+            // Get movement direction
+            Vector3 moveDir = HexDirectionHelper.GetMovementVector(direction).normalized;
+            
+            // Small move forward
+            Vector3 startPos = transform.position;
+            Vector3 bumpPos = startPos + (moveDir * 0.1f);
+            
+            // Bump sequence
+            Sequence bumpSequence = DOTween.Sequence();
+            
+            // Move slightly forward
+            bumpSequence.Append(
+                transform.DOMove(bumpPos, 0.1f)
+                    .SetEase(Ease.OutQuad)
             );
-            // Wait for that off-grid roll to finish
-            while (!offRollDone)
+            
+            // Then back
+            bumpSequence.Append(
+                transform.DOMove(startPos, 0.1f)
+                    .SetEase(Ease.OutQuad)
+            );
+            
+            // Wait for completion
+            yield return bumpSequence.WaitForCompletion();
+        }
+
+        /// <summary>
+        /// Rolls the hexagon between two world positions by pivoting around the edge
+        /// </summary>
+        private IEnumerator RollBetweenPositions(Vector3 fromPos, Vector3 toPos, float duration)
+        {
+            // Calculate the direction vector from start to end
+            Vector3 moveDirection = (toPos - fromPos).normalized;
+            
+            // Find the pivot point (edge of the hexagon in the direction of movement)
+            Vector3 pivotPos = fromPos + (moveDirection * hexRadius);
+            pivotPos.y = fromPos.y; // Keep on the same y-plane
+            
+            // Create pivot object
+            GameObject pivotObject = new GameObject("RollPivot");
+            pivotObject.transform.position = pivotPos;
+            
+            // Make the hexagon a child of the pivot
+            Transform originalParent = transform.parent;
+            Vector3 originalLocalPos = transform.localPosition;
+            Quaternion originalLocalRot = transform.localRotation;
+            
+            transform.SetParent(pivotObject.transform, true);
+            
+            // Determine rotation axis (perpendicular to movement direction in the horizontal plane)
+            Vector3 rotationAxis = Vector3.Cross(Vector3.up, moveDirection).normalized;
+            
+            // Get initial pivot rotation
+            Quaternion startRotation = pivotObject.transform.rotation;
+            
+            // Create rotation target (typically 60° for pointy-top hex grid)
+            Quaternion targetRotation = Quaternion.AngleAxis(120f, rotationAxis) * startRotation;
+            
+            // Track completion
+            bool rollComplete = false;
+            
+            // Animation sequence
+            Sequence rollSequence = DOTween.Sequence();
+            
+            // Rotate the pivot which results in the hexagon rolling
+            rollSequence.Append(
+                pivotObject.transform.DORotateQuaternion(targetRotation, duration)
+                    .SetEase(Ease.OutQuad)
+            );
+            
+            // After rotation, ensure the hexagon is at the target position
+            rollSequence.OnComplete(() => {
+                transform.position = toPos + new Vector3(0, transform.position.y - toPos.y, 0);
+                transform.SetParent(originalParent);
+                
+                // Clean up the pivot object
+                Destroy(pivotObject);
+                rollComplete = true;
+            });
+            
+            // Wait for roll to complete
+            while (!rollComplete)
                 yield return null;
-
-            // Finally, animate falling off the grid
-            FallOffGrid(offGridCoords, direction, gridManager);
-        }
-
-        /// <summary>
-        /// Rolls (tips) this hex from one cell center (startPos) to an adjacent cell center (endPos)
-        /// by rotating around the shared edge. This is a single-step pivot roll.
-        /// </summary>
-        private void PivotRollSingleStep(
-            Vector3 startPos,
-            Vector3 endPos,
-            float rollAngle,
-            float rollDuration,
-            System.Action onComplete)
-        {
-            // 1. Determine the direction from start to end
-            Vector3 moveDir = (endPos - startPos);
-            Vector3 direction = moveDir.normalized;
-
-            // 2. Position a pivot halfway between the cell centers on the ground plane.
-            //    Adjust this radius to match your hex size. For a typical 1.0f diameter, 0.5 is correct.
-            float hexRadius = 0.5f;
-            Vector3 pivotPos = startPos + direction * hexRadius;
-            pivotPos.y = startPos.y; // keep the same Y
-
-            // 3. Create a pivot GameObject at pivotPos
-            GameObject pivotObj = new GameObject("HexPivot");
-            pivotObj.transform.position = pivotPos;
-
-            // 4. Make this hex a child of pivotObj, so rotating pivotObj rotates the hex about that edge
-            transform.SetParent(pivotObj.transform, true);
-
-            // 5. Compute the rotation axis: cross the upward vector with the move direction
-            Vector3 rotationAxis = Vector3.Cross(Vector3.up, direction).normalized;
-
-            // 6. Tween the pivot’s rotation using a quaternion target
-            Quaternion startRotation = pivotObj.transform.rotation;
-            Quaternion targetRotation = Quaternion.AngleAxis(rollAngle, rotationAxis) * startRotation;
-
-            Sequence seq = DOTween.Sequence();
-            seq.Append(
-                pivotObj.transform.DORotateQuaternion(targetRotation, rollDuration)
-                        .SetEase(Ease.OutQuad)
-            );
-
-            // 7. After rotating, move pivotObj to the end position so the hex is centered on that cell
-            seq.AppendCallback(() =>
-            {
-                pivotObj.transform.position = endPos;
-            });
-
-            // 8. On complete, unparent the hex and destroy the pivot
-            seq.OnComplete(() =>
-            {
-                transform.SetParent(null, true);
-                Destroy(pivotObj);
-                onComplete?.Invoke();
-            });
-        }
-
-        /// <summary>
-        /// Coroutine to roll along a path of cell coordinates, pivoting step by step.
-        /// </summary>
-        private IEnumerator RollPathCoroutine(List<Vector2Int> pathCoords, float stepDuration, float rollAngle)
-        {
-            GridManager gm = GameManager.Instance.gridManager;
-            for (int i = 0; i < pathCoords.Count - 1; i++)
-            {
-                // Start and end cell positions
-                Vector3 startPos = gm.GetCell(pathCoords[i]).transform.position;
-                Vector3 endPos   = gm.GetCell(pathCoords[i + 1]).transform.position;
-
-                bool stepDone = false;
-                PivotRollSingleStep(startPos, endPos, rollAngle, stepDuration, () => stepDone = true);
-
-                // Wait until the single step finishes
-                while (!stepDone)
-                    yield return null;
-            }
-        }
-
-        // ------------------------------------------------------
-        // Existing code below is left mostly unchanged
-        // ------------------------------------------------------
-
-        // Added coroutine to delay the vanish
-        private IEnumerator DelayedVanish()
-        {
-            // Wait a moment before vanishing
-            yield return new WaitForSeconds(0.1f);
-            Debug.Log("Starting vanish animation");
-            // Now vanish
-            Vanish();
         }
 
         /// <summary>
@@ -276,36 +404,30 @@ namespace HexaAway.Core
             // The hexagon's current position is the extra roll position (off-grid)
             Vector3 startPosition = transform.position;
             
-            // Calculate the next off–grid coordinate where the hexagon should fall to
-            Vector2Int fallCoords = CalculateNextCellCoords(offGridCoords, direction);
-            // Convert that coordinate to world position and add the same Y offset as used in placement
-            Vector3 fallTarget = gridManager.HexToWorld(fallCoords) + new Vector3(0, 0f, 0);
+            // Calculate a fall target further in the same direction
+            Vector3 directionVector = HexDirectionHelper.GetMovementVector(direction);
+            Vector3 fallTarget = startPosition + directionVector * 2f;
+            
             // Set the fall target's Y to below the grid
             fallTarget.y = -10f;
             
             // Determine the direction from the start to the fall target
             Vector3 moveDir = (fallTarget - startPosition).normalized;
             
-            // Choose a tip position between start and fall target (e.g., 30% of the distance)
+            // Choose a tip position between start and fall target
             Vector3 tipPosition = Vector3.Lerp(startPosition, fallTarget, 0.1f);
             tipPosition.y = startPosition.y; // keep the same height for the tip phase
             
             // Calculate rotation axis for tipping over
             Vector3 rotationAxis = Vector3.Cross(Vector3.up, moveDir).normalized;
             
-            float tipDuration = 0f;
-            float fallDuration = 0.2f;
+            float fallDuration = 0.5f;
             
             Sequence fallSequence = DOTween.Sequence();
             
-            // First phase: tip over the edge
+            // First phase: small tip to start the fall
             fallSequence.Append(
-                transform.DOMove(tipPosition, tipDuration)
-                         .SetEase(Ease.OutQuad)
-            );
-            
-            fallSequence.Join(
-                transform.DORotate(rotationAxis * 45f, tipDuration, RotateMode.LocalAxisAdd)
+                transform.DORotate(rotationAxis * 30f, 0.1f, RotateMode.LocalAxisAdd)
                          .SetEase(Ease.OutQuad)
             );
             
@@ -338,6 +460,8 @@ namespace HexaAway.Core
         /// </summary>
         private void SimpleUnlockAnimation(Vector3 directionVector)
         {
+            isBeingRemoved = true;
+            
             transform.DOMove(transform.position + directionVector * 2f, 0.5f)
                 .SetEase(Ease.OutQuad)
                 .OnComplete(() => {
@@ -347,40 +471,22 @@ namespace HexaAway.Core
         }
 
         /// <summary>
-        /// Compute the next axial coordinates in the given direction.
-        /// </summary>
-        private Vector2Int CalculateNextCellCoords(Vector2Int currentCoords, HexDirection dir)
-        {
-            switch (dir)
-            {
-                case HexDirection.East:
-                    return new Vector2Int(currentCoords.x + 1, currentCoords.y);
-                case HexDirection.SouthEast:
-                    return new Vector2Int(currentCoords.x + 1, currentCoords.y - 1);
-                case HexDirection.SouthWest:
-                    return new Vector2Int(currentCoords.x, currentCoords.y - 1);
-                case HexDirection.West:
-                    return new Vector2Int(currentCoords.x - 1, currentCoords.y);
-                case HexDirection.NorthWest:
-                    return new Vector2Int(currentCoords.x - 1, currentCoords.y + 1);
-                case HexDirection.NorthEast:
-                    return new Vector2Int(currentCoords.x, currentCoords.y + 1);
-                default:
-                    return currentCoords;
-            }
-        }
-
-        /// <summary>
         /// Vanish the hex (scale down, then destroy).
         /// </summary>
         private void Vanish()
         {
+            // Only vanish if this hexagon is actually being removed
+            if (!isBeingRemoved) return;
+            
             // Scale down to zero
             transform.DOScale(Vector3.zero, 0.2f)
                 .SetEase(Ease.InBack)
                 .OnComplete(() => {
                     // Notify the game manager
-                    GameManager.Instance.OnHexagonRemoved();
+                    if (GameManager.Instance != null)
+                    {
+                        GameManager.Instance.OnHexagonRemoved();
+                    }
                     
                     // Destroy the gameobject
                     Destroy(gameObject);

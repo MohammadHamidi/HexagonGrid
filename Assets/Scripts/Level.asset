@@ -22,10 +22,10 @@ MonoBehaviour:
   - {r: 1, g: 0.8, b: 0.2, a: 1}
   gridConfig: {fileID: 11400000, guid: 2dcfd1b2b0a3c482baa9c068730394d1, type: 2}
   hexagons:
-  - coordinates: {x: 0, y: 0}
-    direction: 2
-    colorIndex: 1
-  - coordinates: {x: 1, y: 1}
-    direction: 4
-    colorIndex: 2
-  targetHexagonsToRemove: 3
+  - coordinates: {x: 0, y: 1}
+    direction: 0
+    colorIndex: 0
+  - coordinates: {x: 2, y: 1}
+    direction: 0
+    colorIndex: 0
+  targetHexagonsToRemove: 2

@@ -68,7 +68,10 @@ namespace HexaAway.Core
             // Set current level
             currentLevelIndex = levelIndex;
             currentLevel = levels[levelIndex];
-            
+            if (gridManager != null && currentLevel.gridConfig != null)
+            {
+                gridManager.InitializeGrid(currentLevel.gridConfig);
+            }
             // Generate grid if needed
             if (gridManager == null)
             {

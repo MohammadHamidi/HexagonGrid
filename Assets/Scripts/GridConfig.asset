@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: GridConfig
   m_EditorClassIdentifier: 
   hexHorizontalSpacing: 1.732
-  hexVerticalSpacing: 1
+  hexVerticalSpacing: 1.5
   gridRows:
-  - cells: 010001
+  - cells: 010101
   - cells: 010101
   - cells: 010101

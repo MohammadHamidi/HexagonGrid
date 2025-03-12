@@ -5,6 +5,8 @@ namespace HexaAway.Core
     public class HexCell : MonoBehaviour
     {
         [SerializeField] private MeshRenderer cellRenderer;
+        [SerializeField] private Color defaultColor = new Color(0.8f, 0.8f, 0.8f, 0.5f);
+        [SerializeField] private float cellYOffset = 0.01f; // Small Y offset to prevent Z-fighting
 
         private Vector2Int coordinates;
         private Hexagon currentHexagon;
@@ -20,14 +22,17 @@ namespace HexaAway.Core
         {
             coordinates = coords;
             
-            // Set the material if available from the GridConfig (with additional null checks)
-            // if (cellRenderer != null &&
-            //     GridManager.Instance != null &&
-            //     GridManager.Instance.GridConfig != null &&
-            //     GridManager.Instance.GridConfig.gridCellMaterial != null)
-            // {
-            //     cellRenderer.material = GridManager.Instance.GridConfig.gridCellMaterial;
-            // }
+            // Apply a small Y offset to ensure the cell is visible above the ground plane
+            transform.position = new Vector3(transform.position.x, cellYOffset, transform.position.z);
+            
+            // Set the material if available
+            if (cellRenderer != null && cellRenderer.material != null)
+            {
+                // Create a new instance of the material to avoid shared material changes
+                Material newMat = new Material(cellRenderer.material);
+                newMat.color = defaultColor;
+                cellRenderer.material = newMat;
+            }
         }
         
         public void PlaceHexagon(Hexagon hexagon)
@@ -76,11 +81,7 @@ namespace HexaAway.Core
                 currentHexagon = null;
             }
             
-            if (currentHexagonStack != null)
-            {
-                // Optionally add additional cleanup for stacks if needed
-                currentHexagonStack = null;
-            }
+            currentHexagonStack = null;
         }
         
         /// <summary>
@@ -91,23 +92,41 @@ namespace HexaAway.Core
             ClearOccupant();
         }
         
+#if UNITY_EDITOR
         private void OnDrawGizmos()
         {
-            // // Visual debugging: Draw the cell outline if the grid is configured to show it.
-            // if (GridManager.Instance != null &&
-            //     GridManager.Instance.GridConfig != null &&
-            //     GridManager.Instance.GridConfig.showGridOutlines)
-            // {
-            //     Gizmos.color = GridManager.Instance.GridConfig.gridOutlineColor;
-            //     Gizmos.DrawWireSphere(transform.position, 0.5f);
-            //     
-            //     // Indicate occupied cells with a small green sphere.
-            //     if (IsOccupied)
-            //     {
-            //         Gizmos.color = Color.green;
-            //         Gizmos.DrawSphere(transform.position, 0.2f);
-            //     }
-            // }
+            // Skip if we're in Play Mode as the game handles visualization
+            if (Application.isPlaying)
+                return;
+                
+            // Visual debugging: Draw the cell outline and coordinates in the scene view
+            Gizmos.color = IsOccupied ? Color.green : Color.gray;
+            float radius = 0.4f;
+            
+            // Draw hexagon shape
+            for (int i = 0; i < 6; i++)
+            {
+                float startAngle = ((i * 60f) - 30f) * Mathf.Deg2Rad;
+                float endAngle = (((i + 1) * 60f) - 30f) * Mathf.Deg2Rad;
+                
+                Vector3 start = transform.position + new Vector3(
+                    radius * Mathf.Cos(startAngle),
+                    0.01f,
+                    radius * Mathf.Sin(startAngle)
+                );
+                
+                Vector3 end = transform.position + new Vector3(
+                    radius * Mathf.Cos(endAngle),
+                    0.01f,
+                    radius * Mathf.Sin(endAngle)
+                );
+                
+                Gizmos.DrawLine(start, end);
+            }
+            
+            // Draw coordinates
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 0.1f, $"{coordinates.x},{coordinates.y}");
         }
+#endif
     }
 }

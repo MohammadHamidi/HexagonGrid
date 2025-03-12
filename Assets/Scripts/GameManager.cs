@@ -125,7 +125,7 @@ namespace HexaAway.Core
                 hexColor = currentLevel.colorPalette[colorIndex];
             }
     
-            Debug.Log($"");
+       
             GameObject stackObj = new GameObject($"HexagonStack_{cell.Coordinates.x}_{cell.Coordinates.y}");
             stackObj.transform.position = cell.transform.position + new Vector3(0, 0.2f, 0);
     
@@ -205,7 +205,7 @@ namespace HexaAway.Core
                 return;
                 
             // Check if level completed
-            if (hexagonsRemoved >= currentLevel.targetHexagonsToRemove)
+            if (hexagonsRemoved >= currentLevel.targetHexagonsToRemove*3)
             {
                 // Level completed
                 OnLevelCompleted?.Invoke();

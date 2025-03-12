@@ -16,8 +16,12 @@ namespace HexaAway.Core
         public bool IsOccupied => currentHexagon != null || currentHexagonStack != null;
         public Vector2Int Coordinates => coordinates;
         public Hexagon CurrentHexagon => currentHexagon;
-        public HexagonStack CurrentHexagonStack => currentHexagonStack;
-        
+        public HexagonStack CurrentHexagonStack
+        {
+            get => currentHexagonStack;
+            set => currentHexagonStack = value;
+        }
+
         public void Initialize(Vector2Int coords)
         {
             coordinates = coords;
@@ -37,22 +41,17 @@ namespace HexaAway.Core
         
         public void PlaceHexagon(Hexagon hexagon)
         {
-            // Clear any existing occupant
             ClearOccupant();
-            
-            // Assign the new hexagon
             currentHexagon = hexagon;
-            
             if (hexagon != null)
             {
-                // Set this as the hexagon's cell
                 hexagon.SetCell(this);
-                
-                // Position the hexagon at the cell's position with an offset
-                hexagon.transform.position = transform.position + new Vector3(0, 0.2f, 0);
+                Vector3 targetPos = transform.position + new Vector3(0, 0.2f, 0);
+                Debug.Log($"[PlaceHexagon] Placing {hexagon.name} at cell {Coordinates}, targetPos={targetPos}");
+                hexagon.transform.position = targetPos;
             }
         }
-        
+
         /// <summary>
         /// Place a hexagon stack on this cell.
         /// </summary>

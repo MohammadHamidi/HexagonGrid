@@ -28,4 +28,7 @@ MonoBehaviour:
   - coordinates: {x: 2, y: 1}
     direction: 0
     colorIndex: 0
-  targetHexagonsToRemove: 2
+  - coordinates: {x: 1, y: 0}
+    direction: 1
+    colorIndex: 2
+  targetHexagonsToRemove: 3

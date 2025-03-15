@@ -132,6 +132,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -7511558181221131132, guid: cd6af039c671a384f8e6644b12f7a4e5, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: b32b62efd40d241b983d3c5556dac528, type: 2}
     - target: {fileID: 919132149155446097, guid: cd6af039c671a384f8e6644b12f7a4e5, type: 3}
       propertyPath: m_Name
       value: Hexagon
@@ -175,7 +179,9 @@ MonoBehaviour:
   hexRenderer: {fileID: 6068781597920695479}
   arrowTransform: {fileID: 5104148574643238771}
   moveDuration: 0.5
-  moveDistance: 0
+  rollDuration: 0.3
+  hexRadius: 0.5
+  rollbackDelay: 0.2
 --- !u!64 &8107077599720809397
 MeshCollider:
   m_ObjectHideFlags: 0

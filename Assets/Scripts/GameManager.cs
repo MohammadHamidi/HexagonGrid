@@ -14,20 +14,39 @@ namespace HexaAway.Core
         [Header("Prefabs")]
         [SerializeField] private GameObject hexagonPrefab;
         
+  
         [Header("Level Settings")]
         [SerializeField] private LevelConfig[] levels;
         [SerializeField] private int currentLevelIndex = 0;
-        
+        [SerializeField] private bool useHexagonStacks = true; // New boolean to control stacking
         // Game state
         private int movesUsed = 0;
         private int hexagonsRemoved = 0;
         private LevelConfig currentLevel;
-        
+        // Public property to access the setting
+        public bool UseHexagonStacks 
+        {
+            get { return useHexagonStacks; }
+            set { useHexagonStacks = value; }
+        }
+
+        // Method to toggle the setting and optionally restart the level
+        public void ToggleHexagonStacks(bool restart = false)
+        {
+            useHexagonStacks = !useHexagonStacks;
+    
+            // Optionally restart the current level to apply the change
+            if (restart)
+            {
+                RestartLevel();
+            }
+        }
         // Events
         public event Action<int, int> OnMovesUpdated; // current/total
         public event Action<int, int> OnHexagonsUpdated; // removed/target
         public event Action OnLevelCompleted;
         public event Action OnLevelFailed;
+        public event Action OnAllLevelsCompleted; // New event for when all levels are finished
         
         // Singleton pattern
         public static GameManager Instance { get; private set; }
@@ -98,16 +117,25 @@ namespace HexaAway.Core
         {
             if (currentLevel == null || currentLevel.hexagons == null)
                 return;
-        
+
             foreach (HexagonData hexData in currentLevel.hexagons)
             {
                 // Get the cell at these coordinates
                 HexCell cell = gridManager.GetCell(hexData.coordinates);
-        
+
                 if (cell != null && !cell.IsOccupied)
                 {
-                    // Instead of creating a single hexagon, create a stack
-                    CreateHexagonStack(cell, hexData.direction, hexData.colorIndex);
+                    // Check if we should use stacks or single hexagons
+                    if (useHexagonStacks)
+                    {
+                        // Create a stack of hexagons
+                        CreateHexagonStack(cell, hexData.direction, hexData.colorIndex);
+                    }
+                    else
+                    {
+                        // Create a single hexagon
+                        CreateHexagon(cell, hexData.direction, hexData.colorIndex);
+                    }
                 }
                 else
                 {
@@ -203,24 +231,52 @@ namespace HexaAway.Core
         {
             if (currentLevel == null)
                 return;
-                
+        
+            // Calculate target based on whether we're using stacks
+            int targetToRemove = useHexagonStacks 
+                ? currentLevel.targetHexagonsToRemove * 3 
+                : currentLevel.targetHexagonsToRemove;
+    
             // Check if level completed
-            if (hexagonsRemoved >= currentLevel.targetHexagonsToRemove*3)
+            if (hexagonsRemoved >= targetToRemove)
             {
                 // Level completed
                 OnLevelCompleted?.Invoke();
-                
-                // Show completion UI or load next level
+        
                 Debug.Log("Level completed!");
+        
+                // Wait a short time before loading the next level
+                StartCoroutine(AdvanceToNextLevelAfterDelay(1.5f));
             }
             // Check if level failed (out of moves)
             else if (movesUsed >= currentLevel.moveLimit)
             {
                 // Level failed
                 OnLevelFailed?.Invoke();
-                
+        
                 // Show failure UI
                 Debug.Log("Level failed - out of moves!");
+            }
+        }
+        private IEnumerator AdvanceToNextLevelAfterDelay(float delay)
+        {
+            // Wait for the specified delay
+            yield return new WaitForSeconds(delay);
+            
+            // Check if there are more levels
+            if (currentLevelIndex < levels.Length - 1)
+            {
+                // Load the next level
+                LoadNextLevel();
+            }
+            else
+            {
+                // We've completed all levels
+                Debug.Log("All levels completed!");
+                OnAllLevelsCompleted?.Invoke();
+                
+                // Optional: implement game completion behavior here
+                // For example: return to main menu, show credits, etc.
             }
         }
         
@@ -257,6 +313,16 @@ namespace HexaAway.Core
                     
                     // Destroy the object
                     Destroy(hex.gameObject);
+                }
+            }
+            
+            // Also destroy any HexagonStack objects
+            HexagonStack[] stacks = FindObjectsOfType<HexagonStack>();
+            foreach (HexagonStack stack in stacks)
+            {
+                if (stack != null)
+                {
+                    Destroy(stack.gameObject);
                 }
             }
         }

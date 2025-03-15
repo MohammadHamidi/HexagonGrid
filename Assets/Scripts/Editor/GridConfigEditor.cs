@@ -8,7 +8,7 @@ public class GridConfigEditor : Editor
     private bool showAdvancedOptions = false;
     
     // For visual preview
-    private float previewScale = 15f;
+    private float previewScale = 80;
     private Vector2 scrollPosition;
     private Color gridCellColor = new Color(0.8f, 0.8f, 0.8f, 0.3f);
     private Color gridLineColor = new Color(0.5f, 0.5f, 0.5f, 0.8f);
@@ -126,7 +126,7 @@ public class GridConfigEditor : Editor
             gridCellColor = EditorGUILayout.ColorField("Preview Cell Color", gridCellColor);
             gridLineColor = EditorGUILayout.ColorField("Preview Line Color", gridLineColor);
             showCoordinates = EditorGUILayout.Toggle("Show Coordinates", showCoordinates);
-            previewScale = EditorGUILayout.Slider("Preview Scale", previewScale, 10f, 30f);
+            previewScale = EditorGUILayout.Slider("Preview Scale", previewScale, 60, 160f);
             
             EditorGUILayout.EndVertical();
         }

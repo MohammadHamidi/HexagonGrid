@@ -15,6 +15,6 @@ MonoBehaviour:
   hexHorizontalSpacing: 1.732
   hexVerticalSpacing: 1.5
   gridRows:
+  - cells: 000101
   - cells: 010101
-  - cells: 010101
-  - cells: 010101
+  - cells: 000101

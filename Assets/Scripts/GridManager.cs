@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 
 namespace HexaAway.Core
@@ -13,6 +14,11 @@ namespace HexaAway.Core
         private Dictionary<Vector2Int, HexCell> cells = new Dictionary<Vector2Int, HexCell>();
         private Transform gridContainer;
         private GridConfig currentGridConfig;
+        [Header("Animation Settings")]
+        [SerializeField] private bool useAnimations = true;
+        [SerializeField] private float cellPopDuration = 0.3f;
+        [SerializeField] private float cellDelayBetweenPops = 0.05f;
+        [SerializeField] private Ease cellPopEaseType = Ease.OutBack;
 
         
         // Singleton pattern
